@@ -1,12 +1,30 @@
 import gradio as gr
 import numpy as np
 import pandas as pd
-
+import random
 import shared
 
 
-def process_csv():
+def feed_csv_into_collector(card_activity, categories=["retail", "food", "other"]):
+    activity_range = random.randint(0, 100)
+    return (
+        card_activity,
+        card_activity,
+        {"fraud": activity_range / 100.0, "not fraud": 1 - activity_range / 100.0},
+    )
+
+
+def output_result_dataframe():
     pass
+
+
+def output_result_chart():
+    pass
+
+
+def output_prediction():
+    pass
+
 
 def main():
     preview_data = [
@@ -20,7 +38,9 @@ def main():
             # left panel
             with gr.Column(scale=2):
                 with gr.Tab("CSV"):
-                    shared.gradio['csv_file'] = gr.File(file_count='multiple', file_types=['.csv'])
+                    shared.gradio['csv_file'] = gr.Timeseries(x="time", y=["retail", "food", "other"])
+                    # shared.gradio['csv_file'] = gr.Files(file_count='multiple', file_types=['.csv'])
+                    shared.gradio['csv_button'] = gr.Button(value="Upload")
                     with gr.Accordion("Preview & Edit"):
                         # [1] use Markdown to show a table
                         # shared.gradio['csv_preview'] = gr.Markdown(
@@ -40,8 +60,16 @@ def main():
                             col_count=3
                         )
                 with gr.Tab("SQL"):
-                    shared.gradio["sql_query"] = gr.TextArea(placeholder="Enter the SQL query here ...")
+                    shared.gradio["query_textarea"] = gr.TextArea(placeholder="Enter the SQL query here ...")
                     shared.gradio['query_button'] = gr.Button(value="Query")
+                    with gr.Accordion("Query Result"):
+                        shared.gradio['query_dataframe'] = gr.DataFrame(
+                            headers=["Name", "Age", "Gender"],
+                            value=preview_data,
+                            datatype=["str", "str", "str"],
+                            col_count=3
+                        )
+
                 with gr.Tab("Settings"):
                     gr.Markdown("## Model settings")
                     shared.gradio['temp_slider'] = gr.Slider(0, 10, step=1, label="Temperature")
@@ -51,12 +79,13 @@ def main():
                     )
                     gr.Markdown("***")  # horizontal line
                     gr.Markdown("## Database settings")  # horizontal line
+                    shared.gradio['db_url_textbox'] = gr.Textbox(label="URL", value="http://localhost:5432")
                     with gr.Row():
-                        shared.gradio['db_user_textbox'] = gr.Textbox(label="User")
-                        shared.gradio['db_passwd_textbox'] = gr.Textbox(label="Password", type='password')
-                        shared.gradio['db_name_textbox'] = gr.Textbox(label="Database")
+                        shared.gradio['db_user_textbox'] = gr.Textbox(label="User", value="postgres")
+                        shared.gradio['db_passwd_textbox'] = gr.Textbox(label="Password", type='password',
+                                                                        value="postgres")
+                        shared.gradio['db_name_textbox'] = gr.Textbox(label="Database", value="postgres-db")
                     shared.gradio['db_save_button'] = gr.Button(value="Test & Save")
-
                 shared.gradio['ask_textbox'] = gr.Textbox(label="Prompt", placeholder="Ask questions here ...", lines=3)
                 with gr.Row():
                     shared.gradio['clear_button'] = gr.Button(value="Clear")
@@ -64,12 +93,20 @@ def main():
             # right panel
             with gr.Column(scale=3):
                 with gr.Tab("Result"):
-                    text_input = gr.Textbox("")
+                    shared.gradio['result_dataframe'] = gr.Dataframe(label="Output", headers=["1", "2", "3"])
+                    shared.gradio['result_timeseries'] = gr.Timeseries(label="Chart", x="time",
+                                                                       y=['retail', 'food', 'other'])
+                    shared.gradio['result_label'] = gr.Label(label="Prediction")
                 with gr.Tab("History"):
-                    text_input = gr.Textbox()
+                    shared.gradio['history_label'] = gr.Label()
                 with gr.Tab("Debug Msg"):
-                    text_input = gr.Textbox()
+                    shared.gradio['debug_label'] = gr.Label()
+        shared.gradio['csv_button'].click(feed_csv_into_collector,
+                                          [shared.gradio['csv_file']],
+                                          [shared.gradio['result_dataframe'], shared.gradio['result_timeseries'], shared.gradio['result_label']],
+                                          show_progress=False)
     ui.launch()
+
 
 if __name__ == '__main__':
     main()
