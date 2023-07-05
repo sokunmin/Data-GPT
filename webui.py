@@ -5,11 +5,15 @@ import random
 import shared
 
 
-def feed_csv_into_collector(card_activity, categories=["retail", "food", "other"]):
+def feed_csv_into_collector(files):
+    dfs = []
+    for file in files:
+        dfs.append(pd.read_csv(file.name))
+
     activity_range = random.randint(0, 100)
     return (
-        card_activity,
-        card_activity,
+        dfs[0],
+        dfs[1],
         {"fraud": activity_range / 100.0, "not fraud": 1 - activity_range / 100.0},
     )
 
@@ -28,9 +32,7 @@ def output_prediction():
 
 def main():
     preview_data = [
-        ['Alice', 25, 'F'],
-        ['Bob', 30, 'M'],
-        ['Chun-Ming', 38, 'M']
+        ['', '', ''],
     ]
 
     with gr.Blocks() as ui:
@@ -38,10 +40,10 @@ def main():
             # left panel
             with gr.Column(scale=2):
                 with gr.Tab("CSV"):
-                    shared.gradio['csv_file'] = gr.Timeseries(x="time", y=["retail", "food", "other"])
-                    # shared.gradio['csv_file'] = gr.Files(file_count='multiple', file_types=['.csv'])
+                    # shared.gradio['csv_file'] = gr.Timeseries(x="time", y=["retail", "food", "other"])
+                    shared.gradio['csv_file'] = gr.File(file_count='multiple', file_types=['.csv'])
                     shared.gradio['csv_button'] = gr.Button(value="Upload")
-                    with gr.Accordion("Preview & Edit"):
+                    with gr.Accordion("Drop here to preview"):
                         # [1] use Markdown to show a table
                         # shared.gradio['csv_preview'] = gr.Markdown(
                         #     """
@@ -54,7 +56,7 @@ def main():
                         # )
                         # [2] use DataFrame to show a table
                         shared.gradio['csv_preview'] = gr.DataFrame(
-                            headers=["Name", "Age", "Gender"],
+                            headers=["1", "2", "3"],
                             value=preview_data,
                             datatype=["str", "str", "str"],
                             col_count=3
@@ -93,7 +95,7 @@ def main():
             # right panel
             with gr.Column(scale=3):
                 with gr.Tab("Result"):
-                    shared.gradio['result_dataframe'] = gr.Dataframe(label="Output", headers=["1", "2", "3"])
+                    shared.gradio['result_dataframe'] = gr.Dataframe(label="Output", headers=["1", "2", "3"], max_rows=30)
                     shared.gradio['result_timeseries'] = gr.Timeseries(label="Chart", x="time",
                                                                        y=['retail', 'food', 'other'])
                     shared.gradio['result_label'] = gr.Label(label="Prediction")
