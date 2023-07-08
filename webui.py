@@ -3,20 +3,26 @@ import numpy as np
 import pandas as pd
 import random
 import shared
+from io import StringIO
+from os.path import basename
 
 
 def feed_csv_into_collector(files):
     dfs = []
-    for file in files:
-        dfs.append(pd.read_csv(file.name))
+    if isinstance(files, list):
+        for file in files:
+            df = pd.read_csv(file.name)
+            cols = list(df.columns)
+            dfs.append((basename(file.name), cols, file.name))
+    return dfs
 
-    activity_range = random.randint(0, 100)
-    return (
-        dfs[0],
-        dfs[1],
-        {"fraud": activity_range / 100.0, "not fraud": 1 - activity_range / 100.0},
-    )
 
+def on_csv_selected(df, evt: gr.SelectData):
+    assert isinstance(evt.target, gr.components.Dataframe)
+    row, col = evt.index
+    file_path = df['File path'][row]
+    print(evt)
+    return pd.read_csv(file_path)
 
 def output_result_dataframe():
     pass
@@ -31,45 +37,35 @@ def output_prediction():
 
 
 def main():
-    preview_data = [
-        ['', '', ''],
-    ]
 
     with gr.Blocks() as ui:
         with gr.Row().style(equal_height=True):
             # left panel
             with gr.Column(scale=2):
                 with gr.Tab("CSV"):
-                    # shared.gradio['csv_file'] = gr.Timeseries(x="time", y=["retail", "food", "other"])
-                    shared.gradio['csv_file'] = gr.File(file_count='multiple', file_types=['.csv'])
-                    shared.gradio['csv_button'] = gr.Button(value="Upload")
+                    shared.gradio['csv_button'] = gr.UploadButton(label="Upload CSVs",
+                                                                  file_types=['.csv'],
+                                                                  live=True,
+                                                                  file_count="multiple")
+                    shared.gradio['csv_file_list'] = gr.Dataframe(headers=["Filename", "Categories", "File path"],
+                                                                  type="pandas",
+                                                                  value=[],
+                                                                  interactive=False)
+                    shared.gradio['csv_button'].upload(fn=feed_csv_into_collector,
+                                                       inputs=shared.gradio['csv_button'],
+                                                       outputs=shared.gradio['csv_file_list'],
+                                                       api_name="upload_csv")
                     with gr.Accordion("Drop here to preview"):
-                        # [1] use Markdown to show a table
-                        # shared.gradio['csv_preview'] = gr.Markdown(
-                        #     """
-                        #     | Player Name | Team | Position |
-                        #     | --- | --- | --- |
-                        #     | Shohei Ohtani | Los Angeles Angels | Pitcher/DH |
-                        #     | Fernando Tatis Jr. | San Diego Padres | Shortstop |
-                        #     | Jacob deGrom | New York Mets | Pitcher |
-                        #     """
-                        # )
-                        # [2] use DataFrame to show a table
-                        shared.gradio['csv_preview'] = gr.DataFrame(
-                            headers=["1", "2", "3"],
-                            value=preview_data,
-                            datatype=["str", "str", "str"],
-                            col_count=3
-                        )
+                        shared.gradio['csv_preview'] = gr.DataFrame(overflow_row_behaviour='paginate',
+                                                                    max_rows=12,
+                                                                    interactive=True)
+                    shared.gradio['csv_file_list'].select(on_csv_selected, shared.gradio['csv_file_list'], shared.gradio['csv_preview'])
                 with gr.Tab("SQL"):
                     shared.gradio["query_textarea"] = gr.TextArea(placeholder="Enter the SQL query here ...")
                     shared.gradio['query_button'] = gr.Button(value="Query")
                     with gr.Accordion("Query Result"):
                         shared.gradio['query_dataframe'] = gr.DataFrame(
                             headers=["Name", "Age", "Gender"],
-                            value=preview_data,
-                            datatype=["str", "str", "str"],
-                            col_count=3
                         )
 
                 with gr.Tab("Settings"):
@@ -95,7 +91,8 @@ def main():
             # right panel
             with gr.Column(scale=3):
                 with gr.Tab("Result"):
-                    shared.gradio['result_dataframe'] = gr.Dataframe(label="Output", headers=["1", "2", "3"], max_rows=30)
+                    shared.gradio['result_dataframe'] = gr.Dataframe(label="Output", headers=["1", "2", "3"],
+                                                                     max_rows=30)
                     shared.gradio['result_timeseries'] = gr.Timeseries(label="Chart", x="time",
                                                                        y=['retail', 'food', 'other'])
                     shared.gradio['result_label'] = gr.Label(label="Prediction")
@@ -103,10 +100,7 @@ def main():
                     shared.gradio['history_label'] = gr.Label()
                 with gr.Tab("Debug Msg"):
                     shared.gradio['debug_label'] = gr.Label()
-        shared.gradio['csv_button'].click(feed_csv_into_collector,
-                                          [shared.gradio['csv_file']],
-                                          [shared.gradio['result_dataframe'], shared.gradio['result_timeseries'], shared.gradio['result_label']],
-                                          show_progress=False)
+
     ui.launch()
 
 
