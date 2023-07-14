@@ -47,7 +47,7 @@ def on_pdf_selected(pdf, evt: gr.SelectData):
     # Render the page as a PNG image with a resolution of 300 DPI
     pix = page.get_pixmap(matrix=fitz.Matrix(300 / 72, 300 / 72))
     image = Image.frombytes('RGB', [pix.width, pix.height], pix.samples)
-    return image, (1, doc.page_count)
+    return image, gr.update(minimum=1, maximum=doc.page_count, value=1)
 
 
 def output_result_dataframe():
@@ -77,7 +77,7 @@ def main():
                                                                   value=[],
                                                                   interactive=False)
                     shared.gradio['pdf_preview'] = gr.Image(label='Preview', tool='select')
-                    shared.gradio['pdf_slider'] = gr.Slider(label='Page', step=1)
+                    shared.gradio['pdf_slider'] = gr.Slider(label='Page', step=1, interactive=True)
                     shared.gradio['pdf_button'].upload(fn=feed_pdf_into_collector,
                                                        inputs=shared.gradio['pdf_button'],
                                                        outputs=shared.gradio['pdf_file_list'],
