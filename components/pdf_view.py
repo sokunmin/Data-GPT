@@ -3,7 +3,7 @@ import gradio as gr
 from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.vectorstores import Chroma
 
-from langchain.chains import ConversationalRetrievalChain
+from langchain.chains import RetrievalQA, ConversationalRetrievalChain
 from langchain.chat_models import ChatOpenAI
 
 from langchain.document_loaders import PyPDFLoader
@@ -38,7 +38,7 @@ def add_text(history, text):
     return history
 
 
-class my_app:
+class ChatBot:
     def __init__(self, OPENAI_API_KEY=None) -> None:
         self.OPENAI_API_KEY = OPENAI_API_KEY
         self.chain = None
@@ -76,9 +76,10 @@ class my_app:
         embeddings = OpenAIEmbeddings(openai_api_key=self.OPENAI_API_KEY)
         pdfsearch = Chroma.from_documents(documents, embeddings, collection_name=file_name, )
 
-        chain = ConversationalRetrievalChain.from_llm(ChatOpenAI(temperature=0.0, openai_api_key=self.OPENAI_API_KEY),
-                                                      retriever=pdfsearch.as_retriever(search_kwargs={"k": 1}),
-                                                      return_source_documents=True, )
+        chain = ConversationalRetrievalChain.from_llm(
+            ChatOpenAI(temperature=0.0, openai_api_key=self.OPENAI_API_KEY),
+            retriever=pdfsearch.as_retriever(search_kwargs={"k": 1}),
+            return_source_documents=True)
         return chain
 
 
@@ -115,7 +116,7 @@ def render_first(file):
     return image, []
 
 
-app = my_app()
+app = ChatBot()
 with gr.Blocks() as demo:
     state = gr.State(uuid.uuid4().hex)
     with gr.Column():
@@ -143,12 +144,15 @@ with gr.Blocks() as demo:
     change_api_key.click(fn=enable_api_box, outputs=[api_key])
     btn.upload(fn=render_first, inputs=[btn], outputs=[show_img, chatbot], )
 
-    submit_btn.click(fn=add_text, inputs=[chatbot, txt], outputs=[chatbot, ], queue=False).success(fn=get_response,
-                                                                                                   inputs=[chatbot, txt,
-                                                                                                           btn],
-                                                                                                   outputs=[chatbot,
-                                                                                                            txt]).success(
-        fn=render_file, inputs=[btn], outputs=[show_img])
+    submit_btn.click(
+        fn=add_text,
+        inputs=[chatbot, txt],
+        outputs=[chatbot, ],
+        queue=False
+    ).success(fn=get_response,
+              inputs=[chatbot, txt, btn],
+              outputs=[chatbot, txt]
+    ).success(fn=render_file, inputs=[btn], outputs=[show_img])
 
 demo.queue()
 demo.launch()
