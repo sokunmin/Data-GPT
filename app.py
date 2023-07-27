@@ -1,15 +1,17 @@
+import os
+
 import fitz
 import shared
 import gradio as gr
 import pandas as pd
-from shared import load_file
+from shared import load_file_and_split_chunks
 from typing import List, Set
 from PIL import Image
-from dotenv import load_dotenv
 from os.path import basename, join, exists
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.vectorstores import Chroma
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+from chromadb.config import Settings
 
 
 def load_csv_to_table(files: List[str]):
@@ -21,23 +23,6 @@ def load_csv_to_table(files: List[str]):
     return dfs
 
 
-def on_csv_selected(df, evt: gr.SelectData):
-    assert isinstance(evt.target, gr.components.Dataframe)
-    row, col = evt.index
-    file_path = df['File path'][row]
-    docs = load_file(file_path)
-    if file_path not in shared.db['files']:
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=shared.chunk_size,
-            chunk_overlap=shared.chunk_overlap
-        )
-        texts = text_splitter.split_documents(docs)
-        # create embeddings for the CSV
-        shared.db['db'].add_documents(texts)
-
-    return docs #pd.read_csv(file_path)
-
-
 def load_pdf_to_table(files: List[str]):
     pdf_list = []
     for file in files:
@@ -45,13 +30,18 @@ def load_pdf_to_table(files: List[str]):
     return pdf_list
 
 
+def on_csv_selected(df, evt: gr.SelectData):
+    assert isinstance(evt.target, gr.components.Dataframe)
+    row, col = evt.index
+    file_path = df['File path'][row]
+    docs = load_file_and_split_chunks(file_path)
+    return docs #pd.read_csv(file_path)
+
 def on_pdf_selected(pdf, evt: gr.SelectData):
     row, col = evt.index
-    pdf_path = pdf[row][1]
-    print(pdf_path)
-    image, page_count = render_pdf(pdf_path)
-    # create embeddings for the PDF
-    # TODO:
+    file_path = pdf[row][1]
+    docs = load_file_and_split_chunks(file_path)
+    image, page_count = render_pdf(file_path)
     return image, gr.update(minimum=1, maximum=page_count, value=1)
 
 
@@ -92,31 +82,28 @@ def output_prediction():
 
 
 def create_embeddings():
-    model_name = shared.embeddings_model_name
+    model_name = os.environ['EMBEDDINGS_MODEL_NAME']
     embeddings = HuggingFaceEmbeddings(model_name=model_name)
     return embeddings
 
 
 def load_db():
-    persist_directory = shared.persist_directory
     embeddings = create_embeddings()
-    if exists(join(persist_directory, 'chroma.sqlite3')):
+    if exists(join(shared.PERSIST_DIR, 'chroma.sqlite3')):
         # Update and store locally vectorstore
         db = Chroma(
-            persist_directory=persist_directory,
             embedding_function=embeddings,
             client_settings=shared.CHROMA_SETTINGS
         )
-        shared.db['db'] = db
         collections = set([metadata['source'] for metadata in db.get()['metadatas']])
         shared.db['files'] = collections
     else:
-        shared.db = Chroma.from_documents(
+        db = Chroma.from_documents(
             [],
             embedding=embeddings,
-            persist_directory=persist_directory,
             client_settings=shared.CHROMA_SETTINGS
         )
+    shared.db['db'] = db
 
 
 def main():
@@ -232,6 +219,5 @@ def main():
 
 
 if __name__ == '__main__':
-    load_dotenv()
     load_db()
     main()

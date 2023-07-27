@@ -1,5 +1,6 @@
 import os
 from typing import List
+from dotenv import load_dotenv
 from langchain.document_loaders import (
     CSVLoader,
     PyMuPDFLoader,
@@ -11,21 +12,20 @@ from langchain.document_loaders import (
 )
 from chromadb.config import Settings
 from langchain.schema import Document
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 
+load_dotenv()
 # Define the folder for storing database
-persist_directory = os.environ.get('PERSIST_DIRECTORY')
-source_directory = os.environ.get('SOURCE_DIRECTORY', 'source_documents')
-embeddings_model_name = os.environ.get('EMBEDDINGS_MODEL_NAME')
-chunk_size = 500
-chunk_overlap = 50
-
-
-# Define the Chroma settings
+PERSIST_DIR = os.environ.get('PERSIST_DIRECTORY')
+FILE_DIR = os.environ.get('SOURCE_DIRECTORY', 'source_documents')
+EMBED_MODEL_NAME = os.environ.get('EMBEDDINGS_MODEL_NAME')
+CHUNK_SIZE = os.environ.get('CHUNK_SIZE', 500)
+CHUNK_OVERLAP = os.environ.get('CHUNK_OVERLAP', 50)
 CHROMA_SETTINGS = Settings(
-        persist_directory=persist_directory,
-        anonymized_telemetry=False
+    persist_directory=PERSIST_DIR,
+    anonymized_telemetry=False,
+    is_persistent=True
 )
-
 gr = {}
 
 db = {
@@ -47,12 +47,21 @@ FILE_MAPPING = {
 }
 
 
-def load_file(file_path: str) -> List[Document]:
+def load_file_and_split_chunks(file_path: str) -> List[Document]:
     ext = "." + file_path.rsplit(".", 1)[-1]
     if ext in FILE_MAPPING:
         loader_class, loader_args = FILE_MAPPING[ext]
         loader = loader_class(file_path, **loader_args)
-        return loader.load()
+        docs = loader.load()
+        if file_path not in db['files']:
+            text_splitter = RecursiveCharacterTextSplitter(
+                chunk_size=CHUNK_SIZE,
+                chunk_overlap=CHUNK_OVERLAP
+            )
+            texts = text_splitter.split_documents(docs)
+            # create embeddings for the CSV
+            db['db'].add_documents(texts)
+        return docs
 
     raise ValueError(f"Unsupported file extension '{ext}'")
 
