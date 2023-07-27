@@ -4,6 +4,7 @@ import fitz
 import shared
 import gradio as gr
 import pandas as pd
+from shared import update_file_list
 from shared import load_file_and_split_chunks
 from typing import List, Set
 from PIL import Image
@@ -24,9 +25,13 @@ def load_csv_to_table(files: List[str]):
 
 
 def load_pdf_to_table(files: List[str]):
-    pdf_list = []
+    db_files = list(map(lambda x: (x,), shared.db['files'].keys()))
+    pdf_list = db_files
     for file in files:
-        pdf_list.append((basename(file.name), file.name))
+        filename = basename(file.name)
+        if filename not in shared.db['files']:
+            load_file_and_split_chunks(file.name)
+            pdf_list.append((filename,))
     return pdf_list
 
 
@@ -37,10 +42,11 @@ def on_csv_selected(df, evt: gr.SelectData):
     docs = load_file_and_split_chunks(file_path)
     return docs #pd.read_csv(file_path)
 
-def on_pdf_selected(pdf, evt: gr.SelectData):
+
+def on_pdf_selected(files, pdf, evt: gr.SelectData):
     row, col = evt.index
-    file_path = pdf[row][1]
-    docs = load_file_and_split_chunks(file_path)
+    filename = pdf[row][0]
+    file_path = shared.db['files'][filename]
     image, page_count = render_pdf(file_path)
     return image, gr.update(minimum=1, maximum=page_count, value=1)
 
@@ -89,21 +95,19 @@ def create_embeddings():
 
 def load_db():
     embeddings = create_embeddings()
-    if exists(join(shared.PERSIST_DIR, 'chroma.sqlite3')):
+    if exists(join(shared.PERSIST_DB_DIR, 'chroma.sqlite3')):
         # Update and store locally vectorstore
-        db = Chroma(
+        shared.db['db'] = Chroma(
             embedding_function=embeddings,
             client_settings=shared.CHROMA_SETTINGS
         )
-        collections = set([metadata['source'] for metadata in db.get()['metadatas']])
-        shared.db['files'] = collections
+        update_file_list()
     else:
-        db = Chroma.from_documents(
+        shared.db['db'] = Chroma.from_documents(
             [],
             embedding=embeddings,
             client_settings=shared.CHROMA_SETTINGS
         )
-    shared.db['db'] = db
 
 
 def main():
@@ -116,8 +120,11 @@ def main():
                     shared.gr['pdf_button'] = gr.UploadButton(
                         label="Upload PDFs", file_types=['.pdf'], file_count="multiple")
                     shared.gr['pdf_file_list'] = gr.Dataframe(
-                        headers=["Filename", "File path"],
-                        type="array", value=[], interactive=False)
+                        headers=["Filename"],
+                        label='Files would be ignored if they already exist in database',
+                        type="array",
+                        value=list(map(lambda x: (x,), shared.db['files'].keys())),
+                        interactive=False)
                     with gr.Accordion("Preview"):
                         shared.gr['pdf_preview'] = gr.Image(
                             label='PDF', tool='select', elem_id='preview_box'
@@ -187,7 +194,7 @@ def main():
         )
         shared.gr['pdf_file_list'].select(
             fn=on_pdf_selected,
-            inputs=shared.gr['pdf_file_list'],
+            inputs=[shared.gr['pdf_button'], shared.gr['pdf_file_list']],
             outputs=[shared.gr['pdf_preview'], shared.gr['pdf_slider']]
         )
         shared.gr['csv_button'].upload(
